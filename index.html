@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Consulta de Patrimônio — DETRAN-DF</title>
+  <link rel="stylesheet" href="../../../consulta-patrimonio/style.css">
+</head>
+<body>
+
+<div class="flash" id="flash"></div>
+
+<header class="header">
+  <div class="header-top">
+    <div class="logo-wrap"><img src="../../../consulta-patrimonio/assets/logo.png" alt="DETRAN-DF"></div>
+    <div>
+      <div class="header-org">DETRAN-DF</div>
+      <div class="header-title">Consulta de Patrimônio</div>
+      <div class="header-sub">Departamento de Trânsito do Distrito Federal</div>
+    </div>
+  </div>
+  <div class="header-bar"></div>
+</header>
+
+<div class="main">
+
+  <div class="scan-cta">
+    <div>
+      <div class="scan-cta-label">Modo principal</div>
+      <div class="scan-cta-title">Ler Código de Barras</div>
+      <div class="scan-cta-desc">Aponte a câmera para a etiqueta de patrimônio DETRAN-DF.</div>
+    </div>
+
+    <button class="btn-scan-live" id="btn-live" onclick="toggleScanner()">
+      <span id="btn-live-icon">📷</span>
+      <span id="btn-live-text">Iniciar Scanner</span>
+    </button>
+
+    <!-- html5-qrcode injeta o vídeo aqui automaticamente -->
+    <div class="scanner-container" id="scanner-container">
+      <div id="scanner-viewport"></div>
+    </div>
+
+    <div class="scanner-status" id="scanner-status">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-msg">Aguardando...</span>
+    </div>
+
+    <div class="err-box" id="err-box">
+      <span>⚠️</span>
+      <span id="err-msg">Não foi possível acessar a câmera.</span>
+    </div>
+  </div>
+
+  <div class="divider-wrap"><span>ou insira o número manualmente</span></div>
+
+  <div class="manual-card">
+    <div class="card-label">Número do Patrimônio</div>
+    <div class="inp-row">
+      <input class="inp" id="inp-m" type="text" placeholder="Ex: 040608"
+        inputmode="numeric" onkeydown="if(event.key==='Enter')buscar()">
+      <button class="btn-buscar" onclick="buscar()">Buscar</button>
+    </div>
+  </div>
+
+  <div class="loading" id="loading"><div class="spinner"></div><span>Consultando patrimônio...</span></div>
+  <div id="result-sec"></div>
+  <button class="btn-clear" id="btn-clear" onclick="limpar()">✕ &nbsp; Nova consulta</button>
+</div>
+
+<!-- html5-qrcode: biblioteca testada e confiável para leitura de barras no browser -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<!-- Lógica da aplicação -->
+<script src="../../../consulta-patrimonio/app.js"></script>
+</body>
+</html>
