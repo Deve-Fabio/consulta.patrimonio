@@ -50,6 +50,11 @@ function iniciarScanner() {
     ]
   };
 
+  // Define scannerAtivo=true ANTES do start() para que o callback de
+  // sucesso não seja bloqueado pelo guard — o start() é assíncrono e o
+  // .then() pode chegar depois da primeira leitura em dispositivos rápidos.
+  scannerAtivo = true;
+
   html5Scanner.start(
     { facingMode: 'environment' },  // câmera traseira
     config,
@@ -65,9 +70,9 @@ function iniciarScanner() {
       // Chamado a cada frame sem leitura — normal, não faz nada
     }
   ).then(function() {
-    scannerAtivo = true;
     setStatus('Câmera ativa — aponte para a etiqueta', true);
   }).catch(function(err) {
+    scannerAtivo = false;
     pararScanner();
     var msg = '';
     var s = String(err).toLowerCase();
