@@ -20,6 +20,14 @@ var scannerAtivo = false;
 var codDetectado = null;
 var html5Scanner = null;
 
+/* ── DEBUG ───────────────────────────────────────────────────── */
+function debug(msg) {
+  var el = document.getElementById('debug-box');
+  if (!el) return;
+  el.style.display = 'block';
+  el.textContent = msg;
+}
+
 /* ── SCANNER ─────────────────────────────────────────────────── */
 function toggleScanner() {
   scannerAtivo ? pararScanner() : iniciarScanner();
@@ -35,13 +43,12 @@ function iniciarScanner() {
   document.getElementById('btn-live').classList.add('scanning');
   setStatus('Iniciando câmera...', false);
 
-  // html5-qrcode cria o vídeo dentro do div 'scanner-viewport'
   html5Scanner = new Html5Qrcode('scanner-viewport');
 
   var config = {
-    fps: 15,                      // tentativas por segundo
-    qrbox: { width: 280, height: 100 }, // área de leitura (proporcional a código de barras)
-    aspectRatio: 2.0,             // câmera mais larga que alta — ideal para barras horizontais
+    fps: 15,
+    qrbox: { width: 280, height: 100 },
+    aspectRatio: 2.0,
     formatsToSupport: [
       Html5QrcodeSupportedFormats.CODE_128,
       Html5QrcodeSupportedFormats.CODE_39,
@@ -50,25 +57,21 @@ function iniciarScanner() {
     ]
   };
 
-  // Define scannerAtivo=true ANTES do start() para que o callback de
-  // sucesso não seja bloqueado pelo guard — o start() é assíncrono e o
-  // .then() pode chegar depois da primeira leitura em dispositivos rápidos.
   scannerAtivo = true;
 
   html5Scanner.start(
-    { facingMode: 'environment' },  // câmera traseira
+    { facingMode: 'environment' },
     config,
     function(cod) {
-      // Leitura bem-sucedida
+      // DEBUG: mostra exatamente o que foi lido antes de qualquer processamento
+      debug('RAW lido: [' + cod + ']  |  scannerAtivo: ' + scannerAtivo);
       if (!scannerAtivo) return;
       flashTela();
       codDetectado = cod;
       pararScanner();
       buscar(cod);
     },
-    function(erroFrame) {
-      // Chamado a cada frame sem leitura — normal, não faz nada
-    }
+    function(erroFrame) { /* frame sem leitura — normal */ }
   ).then(function() {
     setStatus('Câmera ativa — aponte para a etiqueta', true);
   }).catch(function(err) {
@@ -117,6 +120,7 @@ function setStatus(msg, ativo) {
 function buscar(cod) {
   var raw = cod || document.getElementById('inp-m').value.trim();
   var num = raw.replace(/\D/g, '');
+  debug('buscar() chamado | raw: [' + raw + '] | num: [' + num + ']');
   if (!num) return;
   pararScanner();
   limparRes();
@@ -124,6 +128,7 @@ function buscar(cod) {
   setTimeout(function() {
     document.getElementById('loading').classList.remove('visible');
     var item = DB[num] || DB[num.padStart(6,'0')] || DB[num.padStart(7,'0')];
+    debug('buscar() resultado | num: [' + num + '] | encontrou: ' + (item ? item.desc : 'NÃO ENCONTRADO'));
     render(item, num);
     document.getElementById('btn-clear').style.display = 'flex';
     document.getElementById('result-sec').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -137,6 +142,7 @@ function limpar() {
   escondeResultados();
   document.getElementById('inp-m').value = '';
   document.getElementById('btn-clear').style.display = 'none';
+  document.getElementById('debug-box').style.display = 'none';
   codDetectado = null;
 }
 function limparRes() {
