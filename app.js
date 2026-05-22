@@ -122,17 +122,28 @@ function buscar(cod) {
   var num = raw.replace(/\D/g, '');
   debug('buscar() chamado | raw: [' + raw + '] | num: [' + num + ']');
   if (!num) return;
-  pararScanner();
+
+  // Só para o scanner se ainda estiver ativo (evita dupla chamada quando
+  // vem do callback do scanner, que já chamou pararScanner() antes)
+  if (scannerAtivo) pararScanner();
+
   limparRes();
   document.getElementById('loading').classList.add('visible');
+
+  // Aguarda 800ms para dar tempo ao pararScanner() terminar de forma
+  // assíncrona antes de manipular o DOM com o resultado
   setTimeout(function() {
-    document.getElementById('loading').classList.remove('visible');
-    var item = DB[num] || DB[num.padStart(6,'0')] || DB[num.padStart(7,'0')];
-    debug('buscar() resultado | num: [' + num + '] | encontrou: ' + (item ? item.desc : 'NÃO ENCONTRADO'));
-    render(item, num);
-    document.getElementById('btn-clear').style.display = 'flex';
-    document.getElementById('result-sec').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 500);
+    try {
+      document.getElementById('loading').classList.remove('visible');
+      var item = DB[num] || DB[num.padStart(6,'0')] || DB[num.padStart(7,'0')];
+      debug('buscar() resultado | num: [' + num + '] | encontrou: ' + (item ? item.desc : 'NÃO ENCONTRADO'));
+      render(item, num);
+      document.getElementById('btn-clear').style.display = 'flex';
+      document.getElementById('result-sec').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch(e) {
+      debug('ERRO no setTimeout: ' + e.message);
+    }
+  }, 800);
 }
 
 /* ── UTILITÁRIOS ─────────────────────────────────────────────── */
