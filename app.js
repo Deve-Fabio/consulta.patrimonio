@@ -3,17 +3,7 @@
    Scanner: html5-qrcode (robusto, funciona via CDN sem configuração)
 ───────────────────────────────────────────────────────────────── */
 
-const DB = {
-  "040608":  {num:"040608",  desc:"Monitor LCD 19pol Samsung",      sf:"Bom Estado",    status:"Ativo",                  unidade:"Coordenadoria de TI",         end:"Bloco B, Sala 112 - Ed. Sede", obs:null},
-  "0012345": {num:"0012345", desc:"Computador Dell Optiplex 7090",  sf:"Bom Estado",    status:"Ativo",                  unidade:"Secretaria de Administracao", end:"Bloco A, Sala 204 - Ed. Sede", obs:null},
-  "0067890": {num:"0067890", desc:"Mesa de Reuniao 10 Lugares",     sf:"Estado Regular",status:"Em Tramitacao",          unidade:"Secretaria de Planejamento",  end:"Bloco C, Sala 310 - Ed. Anexo I",
-    obs:{tipo:"tramitacao",texto:"Bem em processo de tramitacao para nova unidade.",destino:"Secretaria de Educacao",solicitante:"Joao Oliveira",data:"02/05/2026",protocolo:"PROT-2026/00342"}},
-  "0034567": {num:"0034567", desc:"Ar-condicionado Split 12000 BTU",sf:"Mau Estado",    status:"Aguardando Autorizacao", unidade:"Coordenadoria de TI",         end:"Bloco B, Sala 112 - Ed. Sede",
-    obs:{tipo:"aguardando",texto:"Aguardando autorizacao para descarte por obsolescencia.",destino:"Almoxarifado Central (Descarte)",solicitante:"Maria Santos",data:"15/04/2026",protocolo:"PROT-2026/00215"}},
-  "0099001": {num:"0099001", desc:"Cadeira Presidente Ergonomica",  sf:"Bom Estado",    status:"Ativo",                  unidade:"Gabinete do Secretario",      end:"Bloco A, Sala 001 - Ed. Sede", obs:null},
-  "0011111": {num:"0011111", desc:"Projetor Epson PowerLite X41",   sf:"Bom Estado",    status:"Baixado",                unidade:"Sala de Treinamento",         end:"Bloco D, Sala 50 - Ed. Anexo II",
-    obs:{tipo:"baixado",texto:"Bem baixado por doacao ao Hospital Municipal.",destino:"Hospital Municipal Sao Jose",solicitante:"Carlos Ferreira",data:"10/03/2026",protocolo:"PROT-2026/00098"}}
-};
+const API_BASE = 'https://equator-outspoken-chug.ngrok-free.dev/patrimonio-api/api/patrimonio';
 
 /* ── estado global ───────────────────────────────────────────── */
 var scannerAtivo = false;
