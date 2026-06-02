@@ -118,7 +118,7 @@ function buscar(cod) {
   limparRes();
   document.getElementById('loading').classList.add('visible');
 
-  fetch(API_BASE + '/' + num)
+  fetch(API_BASE + '/' + num, { headers: { 'ngrok-skip-browser-warning': 'true' } })
     .then(function(response) {
       if (response.status === 404) return { encontrado: false };
       if (!response.ok) throw new Error('Erro HTTP ' + response.status);
