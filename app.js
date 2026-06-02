@@ -1,8 +1,16 @@
 /* ─────────────────────────────────────────────────────────────────
    DETRAN-DF — Consulta de Patrimônio
-   Scanner: html5-qrcode (robusto, funciona via CDN sem configuração)
+   app.js — busca via API Tomcat 9 + PostgreSQL
 ───────────────────────────────────────────────────────────────── */
 
+// ── Endereço da API ───────────────────────────────────────────────
+// Em teste local o Tomcat roda na porta 8080.
+// Em produção troque pelo domínio real (sem porta).
+//
+// LOCAL:    const API_BASE = 'http://localhost:8080/patrimonio-api/api/patrimonio';
+// PRODUÇÃO: const API_BASE = 'https://patrimonio.detran.df.gov.br/api/patrimonio';
+//
+// Se o HTML e a API estiverem no MESMO servidor/porta, use caminho relativo:
 const API_BASE = 'https://equator-outspoken-chug.ngrok-free.dev/patrimonio-api/api/patrimonio';
 
 /* ── estado global ───────────────────────────────────────────── */
@@ -25,7 +33,6 @@ function toggleScanner() {
 
 function iniciarScanner() {
   escondeResultados();
-
   document.getElementById('scanner-container').classList.add('active');
   document.getElementById('scanner-status').classList.add('visible');
   document.getElementById('btn-live-icon').textContent = '\u23F9\uFE0F';
@@ -53,7 +60,6 @@ function iniciarScanner() {
     { facingMode: 'environment' },
     config,
     function(cod) {
-      // DEBUG: mostra exatamente o que foi lido antes de qualquer processamento
       debug('RAW lido: [' + cod + ']  |  scannerAtivo: ' + scannerAtivo);
       if (!scannerAtivo) return;
       flashTela();
@@ -67,17 +73,16 @@ function iniciarScanner() {
   }).catch(function(err) {
     scannerAtivo = false;
     pararScanner();
-    var msg = '';
     var s = String(err).toLowerCase();
-    if (s.indexOf('permission') !== -1 || s.indexOf('notallowed') !== -1) {
-      msg = 'Permissão de câmera negada. Toque no ícone de cadeado na barra do navegador e permita o acesso à câmera.';
-    } else if (s.indexOf('notfound') !== -1 || s.indexOf('devicenotfound') !== -1) {
+    var msg;
+    if (s.indexOf('permission') !== -1 || s.indexOf('notallowed') !== -1)
+      msg = 'Permissão de câmera negada. Toque no cadeado na barra do navegador e permita o acesso.';
+    else if (s.indexOf('notfound') !== -1 || s.indexOf('devicenotfound') !== -1)
       msg = 'Nenhuma câmera encontrada neste dispositivo.';
-    } else if (s.indexOf('notreadable') !== -1 || s.indexOf('inuse') !== -1) {
+    else if (s.indexOf('notreadable') !== -1 || s.indexOf('inuse') !== -1)
       msg = 'A câmera está sendo usada por outro aplicativo. Feche-o e tente novamente.';
-    } else {
-      msg = 'Não foi possível acessar a câmera. Verifique se a página está em HTTPS e se a permissão foi concedida. Detalhe: ' + err;
-    }
+    else
+      msg = 'Não foi possível acessar a câmera. Verifique se a página está em HTTPS. Detalhe: ' + err;
     mostrarErro(msg);
   });
 }
@@ -87,13 +92,9 @@ function pararScanner() {
     html5Scanner.stop().then(function() {
       html5Scanner.clear();
       html5Scanner = null;
-    }).catch(function() {
-      html5Scanner = null;
-    });
+    }).catch(function() { html5Scanner = null; });
   }
-
   scannerAtivo = false;
-
   document.getElementById('scanner-container').classList.remove('active');
   document.getElementById('scanner-status').classList.remove('visible');
   document.getElementById('btn-live-icon').textContent = '\uD83D\uDCF7';
@@ -106,34 +107,36 @@ function setStatus(msg, ativo) {
   document.getElementById('status-dot').className = 'status-dot' + (ativo ? ' on' : '');
 }
 
-/* ── BUSCA ───────────────────────────────────────────────────── */
+/* ── BUSCA via API ───────────────────────────────────────────── */
 function buscar(cod) {
   var raw = cod || document.getElementById('inp-m').value.trim();
   var num = raw.replace(/\D/g, '');
-  debug('buscar() chamado | raw: [' + raw + '] | num: [' + num + ']');
+  debug('buscar() | num: [' + num + ']');
   if (!num) return;
 
-  // Só para o scanner se ainda estiver ativo (evita dupla chamada quando
-  // vem do callback do scanner, que já chamou pararScanner() antes)
   if (scannerAtivo) pararScanner();
-
   limparRes();
   document.getElementById('loading').classList.add('visible');
 
-  // Aguarda 800ms para dar tempo ao pararScanner() terminar de forma
-  // assíncrona antes de manipular o DOM com o resultado
-  setTimeout(function() {
-    try {
+  fetch(API_BASE + '/' + num)
+    .then(function(response) {
+      if (response.status === 404) return { encontrado: false };
+      if (!response.ok) throw new Error('Erro HTTP ' + response.status);
+      return response.json();
+    })
+    .then(function(item) {
       document.getElementById('loading').classList.remove('visible');
-      var item = DB[num] || DB[num.padStart(6,'0')] || DB[num.padStart(7,'0')];
-      debug('buscar() resultado | num: [' + num + '] | encontrou: ' + (item ? item.desc : 'NÃO ENCONTRADO'));
-      render(item, num);
+      var dados = (item && item.encontrado) ? item : null;
+      debug('API | encontrou: ' + (dados ? dados.desc : 'NÃO'));
+      render(dados, num);
       document.getElementById('btn-clear').style.display = 'flex';
       document.getElementById('result-sec').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch(e) {
-      debug('ERRO no setTimeout: ' + e.message);
-    }
-  }, 800);
+    })
+    .catch(function(err) {
+      document.getElementById('loading').classList.remove('visible');
+      debug('ERRO API: ' + err.message);
+      mostrarErro('Não foi possível consultar o sistema. Verifique a conexão e tente novamente.');
+    });
 }
 
 /* ── UTILITÁRIOS ─────────────────────────────────────────────── */
@@ -166,9 +169,11 @@ function flashTela() {
 
 /* ── RENDER ──────────────────────────────────────────────────── */
 function badgeCls(s) {
-  if (s === 'Ativo')               return 'b-ativo';
-  if (s === 'Em Tramitacao')       return 'b-tram';
-  if (s === 'Baixado')             return 'b-baixado';
+  if (!s) return 'b-aguard';
+  var u = s.toUpperCase();
+  if (u === 'ATIVO' || u === 'ATIVO')           return 'b-ativo';
+  if (u.indexOf('TRAMITA') !== -1)              return 'b-tram';
+  if (u.indexOf('BAIXAD') !== -1)               return 'b-baixado';
   return 'b-aguard';
 }
 
@@ -183,34 +188,37 @@ function render(item, q) {
       + '</div>';
     return;
   }
-  var sfIco = item.sf === 'Bom Estado' ? '&#9989;' : item.sf === 'Estado Regular' ? '&#9888;&#65039;' : '&#10060;';
-  var sfCls = item.sf === 'Bom Estado' ? 'i-green' : item.sf === 'Estado Regular' ? 'i-amber' : 'i-red';
+
+  // Situação física — normaliza para maiúsculo para comparar
+  var sf = item.sf || '';
+  var sfU = sf.toUpperCase();
+  var sfIco = sfU.indexOf('BOM') !== -1 ? '&#9989;'
+            : sfU.indexOf('REGULAR') !== -1 ? '&#9888;&#65039;'
+            : '&#10060;';
+  var sfCls = sfU.indexOf('BOM') !== -1 ? 'i-green'
+            : sfU.indexOf('REGULAR') !== -1 ? 'i-amber'
+            : 'i-red';
+
   var obs = '';
   if (item.obs) {
-    var o  = item.obs;
-    var oi = o.tipo === 'tramitacao' ? '&#128260;' : o.tipo === 'aguardando' ? '&#9203;' : '&#128228;';
     obs = '<div class="obs-card">'
-      + '<div class="obs-emoji">' + oi + '</div>'
+      + '<div class="obs-emoji">&#9203;</div>'
       + '<div style="flex:1">'
       + '<div class="obs-title">Observação</div>'
-      + '<div class="obs-text">'  + o.texto + '</div>'
-      + '<div class="obs-grid">'
-      + '<div><div class="og-lbl">Destino</div><div class="og-val">'     + o.destino     + '</div></div>'
-      + '<div><div class="og-lbl">Solicitante</div><div class="og-val">' + o.solicitante + '</div></div>'
-      + '<div><div class="og-lbl">Data</div><div class="og-val">'        + o.data        + '</div></div>'
-      + '<div><div class="og-lbl">Protocolo</div><div class="og-val">'   + o.protocolo   + '</div></div>'
-      + '</div></div></div>';
+      + '<div class="obs-text">' + item.obs.texto + '</div>'
+      + '</div></div>';
   }
+
   s.innerHTML =
     '<div class="res-card">'
     + '<div class="res-header">'
     + '<div><div class="pat-lbl">Nº Patrimônio</div><div class="pat-num">' + item.num + '</div></div>'
-    + '<span class="badge ' + badgeCls(item.status) + '">' + item.status + '</span>'
+    + '<span class="badge ' + badgeCls(item.status) + '">' + (item.status || '') + '</span>'
     + '</div>'
-    + '<div class="info-row"><div class="i-icon i-purple">&#128230;</div><div><div class="i-lbl">Descrição do Bem</div><div class="i-val">'        + item.desc    + '</div></div></div>'
-    + '<div class="info-row"><div class="i-icon ' + sfCls + '">' + sfIco + '</div><div><div class="i-lbl">Situação Física</div><div class="i-val">' + item.sf      + '</div></div></div>'
-    + '<div class="info-row"><div class="i-icon i-teal">&#127970;</div><div><div class="i-lbl">Unidade Responsável</div><div class="i-val">'        + item.unidade + '</div></div></div>'
-    + '<div class="info-row"><div class="i-icon i-blue">&#128205;</div><div><div class="i-lbl">Localização / Endereço</div><div class="i-val">'     + item.end     + '</div></div></div>'
+    + '<div class="info-row"><div class="i-icon i-purple">&#128230;</div><div><div class="i-lbl">Descrição do Bem</div><div class="i-val">'        + (item.desc    || '') + '</div></div></div>'
+    + '<div class="info-row"><div class="i-icon ' + sfCls + '">' + sfIco + '</div><div><div class="i-lbl">Situação Física</div><div class="i-val">' + sf               + '</div></div></div>'
+    + '<div class="info-row"><div class="i-icon i-teal">&#127970;</div><div><div class="i-lbl">Unidade Responsável</div><div class="i-val">'        + (item.unidade || '') + '</div></div></div>'
+    + '<div class="info-row"><div class="i-icon i-blue">&#128205;</div><div><div class="i-lbl">Localização / Endereço</div><div class="i-val">'     + (item.end     || '') + '</div></div></div>'
     + '</div>'
     + obs;
 }
