@@ -4,27 +4,16 @@
 ───────────────────────────────────────────────────────────────── */
 
 // ── Endereço da API ───────────────────────────────────────────────
-// Em teste local o Tomcat roda na porta 8080.
-// Em produção troque pelo domínio real (sem porta).
+// Quando o site estiver publicado no Tomcat do DETRAN-DF,
+// troque pela URL real fornecida pelo setor de TI.
+// Exemplo: const API_BASE = 'https://patrimonio.detran.df.gov.br/api/patrimonio';
 //
-// LOCAL:    const API_BASE = 'http://localhost:8080/patrimonio-api/api/patrimonio';
-// PRODUÇÃO: const API_BASE = 'https://patrimonio.detran.df.gov.br/api/patrimonio';
-//
-// Se o HTML e a API estiverem no MESMO servidor/porta, use caminho relativo:
-const API_BASE = 'https://equator-outspoken-chug.ngrok-free.dev/patrimonio-api/api/patrimonio';
+const API_BASE = '/patrimonio-api/api/patrimonio';
 
 /* ── estado global ───────────────────────────────────────────── */
 var scannerAtivo = false;
 var codDetectado = null;
 var html5Scanner = null;
-
-/* ── DEBUG ───────────────────────────────────────────────────── */
-function debug(msg) {
-  var el = document.getElementById('debug-box');
-  if (!el) return;
-  el.style.display = 'block';
-  el.textContent = msg;
-}
 
 /* ── SCANNER ─────────────────────────────────────────────────── */
 function toggleScanner() {
@@ -60,7 +49,6 @@ function iniciarScanner() {
     { facingMode: 'environment' },
     config,
     function(cod) {
-      debug('RAW lido: [' + cod + ']  |  scannerAtivo: ' + scannerAtivo);
       if (!scannerAtivo) return;
       flashTela();
       codDetectado = cod;
@@ -111,14 +99,13 @@ function setStatus(msg, ativo) {
 function buscar(cod) {
   var raw = cod || document.getElementById('inp-m').value.trim();
   var num = raw.replace(/\D/g, '');
-  debug('buscar() | num: [' + num + ']');
   if (!num) return;
 
   if (scannerAtivo) pararScanner();
   limparRes();
   document.getElementById('loading').classList.add('visible');
 
-  fetch(API_BASE + '/' + num, { headers: { 'ngrok-skip-browser-warning': 'true' } })
+  fetch(API_BASE + '/' + num)
     .then(function(response) {
       if (response.status === 404) return { encontrado: false };
       if (!response.ok) throw new Error('Erro HTTP ' + response.status);
@@ -127,14 +114,12 @@ function buscar(cod) {
     .then(function(item) {
       document.getElementById('loading').classList.remove('visible');
       var dados = (item && item.encontrado) ? item : null;
-      debug('API | encontrou: ' + (dados ? dados.desc : 'NÃO'));
       render(dados, num);
       document.getElementById('btn-clear').style.display = 'flex';
       document.getElementById('result-sec').scrollIntoView({ behavior: 'smooth', block: 'start' });
     })
     .catch(function(err) {
       document.getElementById('loading').classList.remove('visible');
-      debug('ERRO API: ' + err.message);
       mostrarErro('Não foi possível consultar o sistema. Verifique a conexão e tente novamente.');
     });
 }
@@ -146,7 +131,6 @@ function limpar() {
   escondeResultados();
   document.getElementById('inp-m').value = '';
   document.getElementById('btn-clear').style.display = 'none';
-  document.getElementById('debug-box').style.display = 'none';
   codDetectado = null;
 }
 function limparRes() {
@@ -171,9 +155,9 @@ function flashTela() {
 function badgeCls(s) {
   if (!s) return 'b-aguard';
   var u = s.toUpperCase();
-  if (u === 'ATIVO' || u === 'ATIVO')           return 'b-ativo';
-  if (u.indexOf('TRAMITA') !== -1)              return 'b-tram';
-  if (u.indexOf('BAIXAD') !== -1)               return 'b-baixado';
+  if (u === 'ATIVO')                return 'b-ativo';
+  if (u.indexOf('TRAMITA') !== -1)  return 'b-tram';
+  if (u.indexOf('BAIXAD') !== -1)   return 'b-baixado';
   return 'b-aguard';
 }
 
@@ -189,7 +173,6 @@ function render(item, q) {
     return;
   }
 
-  // Situação física — normaliza para maiúsculo para comparar
   var sf = item.sf || '';
   var sfU = sf.toUpperCase();
   var sfIco = sfU.indexOf('BOM') !== -1 ? '&#9989;'
