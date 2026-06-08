@@ -1,190 +1,183 @@
+// Source code is decompiled from a .class file using FernFlower decompiler (from Intellij IDEA).
 package br.gov.detrandf.patrimonio;
 
-import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-
-import javax.naming.Context;
-import javax.naming.InitialContext;
-import javax.sql.DataSource;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import javax.naming.Context;
+import javax.naming.InitialContext;
+import javax.servlet.annotation.WebServlet;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.sql.DataSource;
 
-/**
- * Servlet de consulta de patrimônio — DETRAN-DF
- *
- * URL: GET /api/patrimonio/{numero}
- * Exemplo: GET /api/patrimonio/040608
- *
- * Retorna JSON com os dados do bem patrimonial.
- * O banco nunca é acessado diretamente pelo navegador.
- */
-@WebServlet("/api/patrimonio/*")
+@WebServlet({"/api/patrimonio/*"})
 public class PatrimonioServlet extends HttpServlet {
+   private static final String DATASOURCE_JNDI = "java:comp/env/jdbc/patrimonio";
+   private static final String SQL = "SELECT   patrimonio,   descricao,   situacao_fisica,   status,   unidade,   endereco,   observacao FROM patrimonio.vw_site_consulta_patrimonio WHERE patrimonio = ?";
 
-    private static final Logger LOG = Logger.getLogger(PatrimonioServlet.class.getName());
+   public PatrimonioServlet() {
+   }
 
-    // Regex: aceita apenas números, entre 1 e 10 dígitos
-    private static final String NUMERO_VALIDO = "\\d{1,10}";
-
-    // ─────────────────────────────────────────────────────────────
-    // GET /api/patrimonio/{numero}
-    // ─────────────────────────────────────────────────────────────
-    @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-            throws IOException {
-
-        // 1. Cabeçalhos de resposta
-        resp.setContentType("application/json;charset=UTF-8");
-        resp.setHeader("Cache-Control", "no-store");           // não cacheia dados
-        resp.setHeader("X-Content-Type-Options", "nosniff");   // segurança extra
-
-        // Permite que o app.js (mesma origem) acesse normalmente.
-        // Se front e back estiverem em origens diferentes, ajuste o domínio abaixo.
-        resp.setHeader("Access-Control-Allow-Origin", "*");
-
-        PrintWriter out = resp.getWriter();
-
-        // 2. Extrair número do patrimônio da URL  →  /api/patrimonio/040608
-        String pathInfo = req.getPathInfo();           // "/040608"
-        if (pathInfo == null || pathInfo.length() < 2) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            out.print("{\"erro\":\"Informe o numero do patrimônio na URL.\"}");
-            return;
-        }
-
-        String numeroRaw = pathInfo.substring(1);      // remove a barra inicial
-
-        // 3. Validação: somente dígitos, tamanho razoável
-        if (!numeroRaw.matches(NUMERO_VALIDO)) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            out.print("{\"erro\":\"Numero de patrimônio inválido.\"}");
-            return;
-        }
-
-        // 4. Consultar o banco via JNDI DataSource (configurado no context.xml)
-        try {
-            String json = consultarPatrimonio(numeroRaw);
-
-            if (json == null) {
-                resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                out.print("{\"erro\":\"Patrimônio não encontrado.\"}");
-            } else {
-                resp.setStatus(HttpServletResponse.SC_OK);
-                out.print(json);
+   protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+      String pathInfo = req.getPathInfo();
+      if (pathInfo != null && !pathInfo.equals("/")) {
+         String numeroRaw = pathInfo.substring(1).trim();
+         if (!numeroRaw.matches("\\d{1,15}")) {
+            this.sendError(resp, 400, "Número de patrimônio inválido.");
+         } else {
+            DataSource ds;
+            try {
+               Context ctx = new InitialContext();
+               ds = (DataSource)ctx.lookup("java:comp/env/jdbc/patrimonio");
+            } catch (Exception e) {
+               this.log("Erro ao obter DataSource: " + e.getMessage());
+               this.sendError(resp, 503, "Serviço temporariamente indisponível.");
+               return;
             }
 
-        } catch (Exception e) {
-            LOG.log(Level.SEVERE, "Erro ao consultar patrimônio: " + numeroRaw, e);
-            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            // Mensagem genérica — nunca expor detalhes do erro ao cliente
-            out.print("{\"erro\":\"Erro interno. Tente novamente.\"}");
-        }
-    }
+            String[] tentativas = this.gerarTentativas(numeroRaw);
 
-    // ─────────────────────────────────────────────────────────────
-    // Consulta ao banco
-    // ─────────────────────────────────────────────────────────────
-    private String consultarPatrimonio(String numero) throws Exception {
+            try {
+               Connection conn = ds.getConnection();
+               Throwable var8 = null;
 
-        // Busca o DataSource configurado no context.xml do Tomcat
-        Context ctx  = new InitialContext();
-        DataSource ds = (DataSource) ctx.lookup("java:comp/env/jdbc/patrimonio");
+               try {
+                  String resultado = null;
 
-        /*
-         * A query traz o bem pelo número exato OU com zero-padding de 6/7 dígitos,
-         * reproduzindo a mesma lógica que estava no DB local do app.js.
-         *
-         * Ajuste a query, tabela e colunas conforme o seu banco real.
-         */
-        String sql = """
-                SELECT
-                    p.numero,
-                    p.descricao,
-                    p.situacao_fisica,
-                    p.status,
-                    p.unidade,
-                    p.endereco,
-                    o.tipo        AS obs_tipo,
-                    o.texto       AS obs_texto,
-                    o.destino     AS obs_destino,
-                    o.solicitante AS obs_solicitante,
-                    o.data        AS obs_data,
-                    o.protocolo   AS obs_protocolo
-                FROM patrimonio p
-                LEFT JOIN patrimonio_obs o ON o.numero = p.numero
-                WHERE p.numero = ?
-                   OR p.numero = LPAD(?, 6, '0')
-                   OR p.numero = LPAD(?, 7, '0')
-                LIMIT 1
-                """;
+                  for(String tentativa : tentativas) {
+                     PreparedStatement ps = conn.prepareStatement("SELECT   patrimonio,   descricao,   situacao_fisica,   status,   unidade,   endereco,   observacao FROM patrimonio.vw_site_consulta_patrimonio WHERE patrimonio = ?");
+                     Throwable var15 = null;
 
-        try (Connection conn = ds.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+                     try {
+                        ps.setString(1, tentativa);
+                        ResultSet rs = ps.executeQuery();
+                        Throwable var17 = null;
 
-            // PreparedStatement: banco trata o valor como DADO, nunca como código SQL
-            ps.setString(1, numero);
-            ps.setString(2, numero);
-            ps.setString(3, numero);
+                        try {
+                           if (rs.next()) {
+                              resultado = this.buildJson(rs);
+                              break;
+                           }
+                        } catch (Throwable var73) {
+                           var17 = var73;
+                           throw var73;
+                        } finally {
+                           if (rs != null) {
+                              if (var17 != null) {
+                                 try {
+                                    rs.close();
+                                 } catch (Throwable var71) {
+                                    var17.addSuppressed(var71);
+                                 }
+                              } else {
+                                 rs.close();
+                              }
+                           }
 
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return null;   // não encontrado
-                }
-                return montarJson(rs);
+                        }
+                     } catch (Throwable var75) {
+                        var15 = var75;
+                        throw var75;
+                     } finally {
+                        if (ps != null) {
+                           if (var15 != null) {
+                              try {
+                                 ps.close();
+                              } catch (Throwable var70) {
+                                 var15.addSuppressed(var70);
+                              }
+                           } else {
+                              ps.close();
+                           }
+                        }
+
+                     }
+                  }
+
+                  resp.setContentType("application/json;charset=UTF-8");
+                  resp.setHeader("Cache-Control", "no-store");
+                  PrintWriter out = resp.getWriter();
+                  if (resultado != null) {
+                     resp.setStatus(200);
+                     out.print(resultado);
+                  } else {
+                     resp.setStatus(404);
+                     out.print("{\"encontrado\":false}");
+                  }
+               } catch (Throwable var77) {
+                  var8 = var77;
+                  throw var77;
+               } finally {
+                  if (conn != null) {
+                     if (var8 != null) {
+                        try {
+                           conn.close();
+                        } catch (Throwable var69) {
+                           var8.addSuppressed(var69);
+                        }
+                     } else {
+                        conn.close();
+                     }
+                  }
+
+               }
+            } catch (SQLException e) {
+               this.log("Erro SQL: " + e.getMessage());
+               this.sendError(resp, 500, "Erro ao consultar o patrimônio.");
             }
-        }
-    }
 
-    // ─────────────────────────────────────────────────────────────
-    // Monta o JSON manualmente (sem dependência extra como Gson/Jackson)
-    // ─────────────────────────────────────────────────────────────
-    private String montarJson(ResultSet rs) throws SQLException {
+         }
+      } else {
+         this.sendError(resp, 400, "Informe o número do patrimônio na URL.");
+      }
+   }
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-        sb.append("\"num\":"        ).append(jsonStr(rs.getString("numero")))        .append(",");
-        sb.append("\"desc\":"       ).append(jsonStr(rs.getString("descricao")))      .append(",");
-        sb.append("\"sf\":"         ).append(jsonStr(rs.getString("situacao_fisica"))).append(",");
-        sb.append("\"status\":"     ).append(jsonStr(rs.getString("status")))         .append(",");
-        sb.append("\"unidade\":"    ).append(jsonStr(rs.getString("unidade")))        .append(",");
-        sb.append("\"end\":"        ).append(jsonStr(rs.getString("endereco")));
+   private String[] gerarTentativas(String numero) {
+      String base = numero.replaceFirst("^0+", "");
+      if (base.isEmpty()) {
+         base = "0";
+      }
 
-        // Observação é opcional (LEFT JOIN pode retornar null)
-        String obsTipo = rs.getString("obs_tipo");
-        if (obsTipo != null) {
-            sb.append(",\"obs\":{");
-            sb.append("\"tipo\":"       ).append(jsonStr(obsTipo))                          .append(",");
-            sb.append("\"texto\":"      ).append(jsonStr(rs.getString("obs_texto")))        .append(",");
-            sb.append("\"destino\":"    ).append(jsonStr(rs.getString("obs_destino")))      .append(",");
-            sb.append("\"solicitante\":").append(jsonStr(rs.getString("obs_solicitante")))  .append(",");
-            sb.append("\"data\":"       ).append(jsonStr(rs.getString("obs_data")))         .append(",");
-            sb.append("\"protocolo\":" ).append(jsonStr(rs.getString("obs_protocolo")));
-            sb.append("}");
-        } else {
-            sb.append(",\"obs\":null");
-        }
+      return new String[]{numero, base, String.format("%06d", Long.parseLong(base)), String.format("%07d", Long.parseLong(base)), String.format("%08d", Long.parseLong(base))};
+   }
 
-        sb.append("}");
-        return sb.toString();
-    }
+   private String buildJson(ResultSet rs) throws SQLException {
+      String obs = rs.getString("observacao");
+      boolean temObs = obs != null && !obs.trim().isEmpty();
+      StringBuilder sb = new StringBuilder();
+      sb.append("{");
+      sb.append("\"encontrado\":true,");
+      sb.append("\"num\":").append(this.jsonStr(rs.getString("patrimonio"))).append(",");
+      sb.append("\"desc\":").append(this.jsonStr(rs.getString("descricao"))).append(",");
+      sb.append("\"sf\":").append(this.jsonStr(rs.getString("situacao_fisica"))).append(",");
+      sb.append("\"status\":").append(this.jsonStr(rs.getString("status"))).append(",");
+      sb.append("\"unidade\":").append(this.jsonStr(rs.getString("unidade"))).append(",");
+      sb.append("\"end\":").append(this.jsonStr(rs.getString("endereco"))).append(",");
+      if (temObs) {
+         sb.append("\"obs\":{");
+         sb.append("\"tipo\":\"aguardando\",");
+         sb.append("\"texto\":").append(this.jsonStr(obs));
+         sb.append("}");
+      } else {
+         sb.append("\"obs\":null");
+      }
 
-    // Escapa string para JSON seguro (evita XSS via JSON)
-    private String jsonStr(String valor) {
-        if (valor == null) return "null";
-        return "\"" + valor
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t")
-                + "\"";
-    }
+      sb.append("}");
+      return sb.toString();
+   }
+
+   private String jsonStr(String value) {
+      return value == null ? "null" : "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + "\"";
+   }
+
+   private void sendError(HttpServletResponse resp, int status, String msg) throws IOException {
+      resp.setStatus(status);
+      resp.setContentType("application/json;charset=UTF-8");
+      resp.getWriter().print("{\"erro\":\"" + msg + "\"}");
+   }
 }
