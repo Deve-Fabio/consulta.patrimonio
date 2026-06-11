@@ -8,7 +8,7 @@
 // troque pela URL real fornecida pelo setor de TI.
 // Exemplo: const API_BASE = 'https://patrimonio.detran.df.gov.br/api/patrimonio';
 //
-const API_BASE = '/patrimonio-api/api/patrimonio';
+const API_BASE = '/consulta-patrimonio/api/patrimonio';
 
 /* ── estado global ───────────────────────────────────────────── */
 var scannerAtivo = false;
