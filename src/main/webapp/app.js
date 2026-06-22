@@ -3,11 +3,7 @@
    app.js — busca via API Tomcat 9 + PostgreSQL
 ───────────────────────────────────────────────────────────────── */
 
-// ── Endereço da API ───────────────────────────────────────────────
-// Quando o site estiver publicado no Tomcat do DETRAN-DF,
-// troque pela URL real fornecida pelo setor de TI.
-// Exemplo: const API_BASE = 'https://patrimonio.detran.df.gov.br/api/patrimonio';
-//
+
 const API_BASE = '/consulta-patrimonio/api/patrimonio';
 
 /* ── estado global ───────────────────────────────────────────── */
